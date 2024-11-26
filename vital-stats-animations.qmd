@@ -1,0 +1,773 @@
+---
+title: "Vital Stats Animations"
+format:
+  revealjs:
+    embed-resources: true
+---
+
+```{r setup}
+library(plotly)
+library(dplyr)
+library(readxl)
+library(tidyr)
+
+nisra_green_decoration <- "#CEDC20"
+nisra_blue <- "#3878c5"
+nisra_navy <- "#00205b"
+nisra_col3_green <- "#68a41e"
+nisra_col4_purple <- "#732777"
+nisra_col5_lilac <- "#ce70d2" 
+```
+
+## Number of deaths by age
+
+```{r deaths bar}
+
+# Read data, reshape and group staff age 110+
+
+deaths <- read_xlsx("data/Deaths by SYA.xlsx",
+                            sheet = "Deaths Persons",
+                            range = "A4:BR120") %>% 
+  pivot_longer(cols = !"Age",
+               names_to = "Year",
+               values_to = "deaths") %>% 
+  mutate(Year = as.numeric(Year),
+         Age = case_when(Age > 110 ~ 110,
+                         TRUE ~ Age)) %>% 
+  group_by(Age, Year) %>% 
+  summarise(deaths = sum(deaths, na.rm = TRUE))
+
+# Values for separate trace with year 1 isolated
+
+deaths_year_1 <- deaths %>%
+  filter(Year == min(Year)) %>% 
+  select(Age, deaths_year_1 = deaths)
+
+# Match on to deaths data frame so year 1 is displayed for all
+# animation frames
+
+deaths <- deaths %>% 
+  left_join(deaths_year_1,
+            by = "Age")
+
+# Create the base plot
+plot <- plot_ly(deaths,
+    x = ~Age,
+    y = ~deaths_year_1,
+    frame = ~Year,
+    type = "bar",
+    marker = list(color = "#8fb7e7"),
+    showlegend = TRUE,
+    name = ~paste("Deaths in", min(Year))) %>%
+  add_trace(
+    data = deaths,
+    x = ~Age,
+    y = ~deaths,
+    type = "bar",
+    frame = ~Year,
+    marker = list(color = "#68a41e80"),
+    showlegend = TRUE,
+    name = ~paste("Deaths in", Year)
+  ) %>%
+  layout(
+    bargap = 0,
+    barmode = "overlay",
+    font = list(family = "Arial", size = 14),
+    xaxis = list(dtick = "10"),
+    yaxis = list(title = ""),
+    margin = list(t = 100),
+    legend = list(showlegend = TRUE,
+                  x = 0.05,
+                  xanchor = "left",
+                  xref = "paper",
+                  y = 1.05,
+                  yanchor = "top"),
+    images = list(
+      list(source = "img/NISRA logo Pens Colour (EPS).png",
+           xref = "paper",
+           yref = "paper",
+           x = 1,
+           y = 1.3,
+           sizex = 0.25,
+           sizey = 0.25,
+           xanchor = "right",
+           yanchor = "top")
+    ),
+    title = list(text = ~paste("Number of deaths by age:", min(Year), "to", max(Year)))
+  ) %>%
+  animation_opts(
+    frame = 500,
+    easing = "sin",
+    redraw = TRUE
+  ) %>%
+  animation_slider(
+    currentvalue = list(
+      font = list(
+        color = "black",    
+        size = 18 
+      )
+    )
+  ) %>%
+  config(displayModeBar = FALSE)
+
+# Create frames with annotations
+annotations_per_frame <- lapply(unique(deaths$Year), function(year) {
+  annotations <- list()
+  
+  if (year >= 1965) {
+    annotations <- append(annotations, list(
+      list(
+        x = 5,
+        y = 400,
+        xref = "x",
+        yref = "y",
+        text = "Fall in infant mortality\nbetween the mid-60s\nand the early 90s",
+        showarrow = FALSE,
+        font = list(size = 14),
+        xanchor = "left",
+        yanchor = "bottom"
+      )
+    ))
+  }
+
+  if (year >= 2019) {
+    annotations <- append(annotations, list(
+      list(
+        x = 100,
+        y = 600,
+        xref = "x",
+        yref = "y",
+        text = "2020: Start of COVID-19\npandemic",
+        showarrow = FALSE,
+        font = list(size = 14),
+        xanchor = "center",
+        yanchor = "middle"
+      )
+    ))
+  }
+  
+  if (year >= min(unique(deaths$Year))) {
+    annotations <- append(annotations, list(
+      list(
+        x = 113,
+        xref = "x",
+        y = -0.04,
+        yref = "paper",
+        text = "+",
+        showarrow = FALSE,
+        font = list(size = 14),
+        xanchor = "right",
+        yanchor = "middle"
+      )
+    ))
+  }
+
+  list(
+    name = as.character(year),
+    layout = list(annotations = annotations)
+  )
+})
+
+# Add the frames to the plotly object
+if (!is.null(plot$x$frames)) {
+  # Iterate over each frame and set or clear annotations as needed
+  for (i in seq_along(plot$x$frames)) {
+    frame_name <- plot$x$frames[[i]]$name
+    
+    # Find the corresponding annotations for this frame
+    annotation_frame <- annotations_per_frame[[i]]
+    
+    # Check if the frame names match
+    if (frame_name == annotation_frame$name) {
+      # Replace the annotations for this frame instead of appending
+      plot$x$frames[[i]]$layout$annotations <- annotation_frame$layout$annotations
+    }
+  }
+}
+
+# Display the plot
+plot
+
+
+```
+
+## Births
+
+```{r births}
+
+births <- read_xlsx("data/Births, Marriages and civil partnerships by single year of age.xlsx",
+                    sheet = "Births",
+                    range = "A3:AO53") %>% 
+  select(-`All Ages`) %>% 
+  mutate_all(as.numeric) %>% 
+  pivot_longer(cols = !"Year",
+               names_to = "Age",
+               values_to = "births") %>% 
+  mutate(births = case_when(is.na(births) ~ 0,
+                            TRUE ~ births),
+         Year = as.numeric(Year))
+
+births_year_1 <- births %>% 
+  filter(Year == min(Year)) %>% 
+  select(Age, births_year_1 = births) 
+
+births <- births %>% 
+  left_join(births_year_1,
+            by = "Age") 
+
+median_by_year <- read_xlsx("data/median mothers age at birth.xlsx")
+
+names(median_by_year) <- c("Year", "median_age")
+
+
+plot <- plot_ly(births,
+    x = ~Age,
+    y = ~births_year_1,
+    frame = ~Year,
+    type = "scatter",
+    mode = "lines",
+    line = list(color = nisra_blue,
+                width = 2),
+    showlegend = TRUE,
+    name = ~paste("Births in", min(Year))) %>%
+  add_trace(
+    data = births,
+    x = ~Age,
+    y = ~births,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = nisra_navy),
+    showlegend = TRUE,
+    name = ~paste("Births in", Year)
+  ) %>%
+  layout(
+    font = list(family = "Arial", size = 14),
+    yaxis = list(title = "",
+                 tickformat = ",.0f"),
+    xaxis = list(showgrid = FALSE),
+    margin = list(t = 100),
+    legend = list(showlegend = TRUE,
+                  x = 0.05,
+                  xanchor = "left",
+                  xref = "paper",
+                  y = 0.93,
+                  yanchor = "top"),
+    images = list(
+      list(source = "img/NISRA logo Pens Colour (EPS).png",
+           xref = "paper",
+           yref = "paper",
+           x = 1,
+           y = 1.3,
+           sizex = 0.25,
+           sizey = 0.25,
+           xanchor = "right",
+           yanchor = "top")
+    ),
+    title = list(text = ~paste("Number of births by mother's age:", min(Year), "to", max(Year)))
+  ) %>%
+  animation_opts(
+    frame = 500,
+    easing = "sin",
+    redraw = TRUE
+  ) %>%
+  animation_slider(
+    currentvalue = list(
+      font = list(
+        color = "black",    # Set the color for the year text
+        size = 18         # Set the size for the year text
+      )
+    )
+  ) %>%
+  config(displayModeBar = FALSE)
+
+# # Create frames with annotations
+annotations_per_frame <- lapply(unique(births$Year), function(year) {
+  annotations <- list()
+
+  # Get the median_age for the current year
+  median_age_for_year <- median_by_year %>%
+    filter(Year == year) %>%
+    pull(median_age)
+  
+  # Create annotation for the median_age
+  annotations <- append(annotations, list(
+    list(
+      x = median_age_for_year - 11.5,  # Position of the annotation on the x-axis
+      y = 2000,  # Position of the annotation on the y-axis
+      xref = "x",
+      yref = "y",
+      text = paste("Median Age: ", median_age_for_year),
+      showarrow = FALSE,
+      font = list(size = 16),
+      xanchor = "left",
+      yanchor = "middle"
+    )
+  ))
+  
+   # Add the vertical line as a shape at the median age
+  vertical_line <- list(
+    type = "line",
+    x0 = median_age_for_year - 12,  # Starting position of the vertical line (median_age)
+    x1 = median_age_for_year - 12,  # Ending position of the vertical line (same as x0 for vertical)
+    y0 = 0,  # Starting position of the line on the y-axis (at the bottom)
+    y1 = 2000,  # Ending position of the line on the y-axis (at the top, adjust this based on your y-axis range)
+    line = list(
+      color = nisra_col3_green,  # Line color
+      width = 3,      # Line width
+      dash = "dot"    # Line style (optional, you can adjust to solid or other styles)
+    )
+  )
+
+  list(
+    name = as.character(year),
+    layout = list(
+      annotations = annotations,
+      shapes = list(vertical_line)  # Add vertical line to the layout
+    )
+  )
+})
+
+# Add the frames to the plotly object
+if (!is.null(plot$x$frames)) {
+  # Iterate over each frame and set or clear annotations as needed
+  for (i in seq_along(plot$x$frames)) {
+    frame_name <- plot$x$frames[[i]]$name
+
+    # Find the corresponding annotations for this frame
+    annotation_frame <- annotations_per_frame[[i]]
+
+    # Check if the frame names match
+    if (frame_name == annotation_frame$name) {
+      # Replace the annotations and shapes for this frame instead of appending
+      plot$x$frames[[i]]$layout$annotations <- annotation_frame$layout$annotations
+      plot$x$frames[[i]]$layout$shapes <- annotation_frame$layout$shapes
+    }
+  }
+}
+
+# Display the plot
+plot
+
+```
+
+
+
+## Marriages - males
+
+```{r marriages - males}
+marriages <- read_xlsx("data/Births, Marriages and civil partnerships by single year of age.xlsx",
+                    sheet = "Marriages - Males",
+                    range = "A2:AY79")%>% 
+  pivot_longer(cols = !"AGE",
+               names_to = "Year",
+               values_to = "marriages") %>% 
+  rename("Age" = "AGE") %>% 
+  mutate(Year = as.numeric(Year),
+         Age = case_when(Age > 70 ~ 70,
+                         TRUE ~ Age)) %>% 
+  group_by(Age, Year) %>% 
+  summarise(marriages = sum(marriages, na.rm = TRUE)) %>% 
+  ungroup()
+
+# group to 70+
+
+
+for (i in c(1974, 1983, 1993, 2003, 2013)) {
+  
+  marriages_year <- marriages %>% 
+  filter(Year == i) %>% 
+  select(Age, marriages_year = marriages)
+  
+ 
+  
+  marriages <- left_join(marriages,
+                               marriages_year,
+                               by = "Age") %>% 
+    mutate(marriages_year = case_when(Year < i ~ marriages,
+                                      TRUE ~ marriages_year))
+  
+  names(marriages)[names(marriages) == "marriages_year"] <- paste0("marriages_", i)
+  
+  
+}
+
+# Create the base plot
+plot <-  
+  plot_ly(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages_1974,
+    frame = ~Year,
+    type = "scatter",
+    mode = "lines",
+    line = list(color = nisra_blue,
+                width = 2),
+     showlegend = TRUE,
+     name = "Marriages in 1974"
+  ) %>% 
+  add_trace(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages_1983,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = nisra_col3_green),
+    showlegend = TRUE,
+    name = "Marriages in 1983"
+  ) %>% 
+  add_trace(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages_1993,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = nisra_col4_purple),
+    showlegend = TRUE,
+    name = "Marriages in 1993"
+  ) %>%
+  add_trace(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages_2003,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = nisra_col5_lilac),
+    showlegend = TRUE,
+    name = "Marriages in 2003"
+  ) %>%
+   add_trace(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages_2013,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = "#555555"),
+    showlegend = TRUE,
+    name = "Marriages in 2013"
+    ) %>% 
+  add_trace(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = nisra_navy),
+    showlegend = TRUE,
+    name = ~paste("Marriages in", Year)) %>%
+  layout(
+    font = list(family = "Arial", size = 14),
+    yaxis = list(title = "",
+                 tickformat = ",.0f"),
+    xaxis = list(showgrid = FALSE),
+    margin = list(t = 100),
+    legend = list(showlegend = TRUE,
+                  x = 1,
+                  xanchor = "right",
+                  xref = "paper",
+                  y = 0.94,
+                  yanchor = "top"),
+    images = list(
+      list(source = "img/NISRA logo Pens Colour (EPS).png",
+           xref = "paper",
+           yref = "paper",
+           x = 1,
+           y = 1.3,
+           sizex = 0.25,
+           sizey = 0.25,
+           xanchor = "right",
+           yanchor = "top")
+    ),
+    title = list(text = ~paste("Marriages by age of male:", min(Year), "to", max(Year)))
+  ) %>%
+  animation_opts(
+    frame = 500,
+    easing = "sin",
+    redraw = TRUE
+  ) %>%
+  animation_slider(
+    currentvalue = list(
+      font = list(
+        color = "black",    
+        size = 18         
+      )
+    )
+  ) %>%
+  config(displayModeBar = FALSE)
+
+# Create frames with annotations
+annotations_per_frame <- lapply(unique(marriages$Year), function(year) {
+  annotations <- list()
+
+  if (year >= 2019) {
+    annotations <- append(annotations, list(
+      list(
+        x = 0.5,
+        xref = "paper",
+        y = 0.5,
+        yref = "paper",
+        text = "2020: Start of\nCOVID-19 pandemic",
+        showarrow = FALSE,
+        font = list(size = 14),
+        xanchor = "center",
+        yanchor = "middle"
+      )
+    ))
+  }
+  
+  if (year >= min(unique(marriages$Year))) {
+    annotations <- append(annotations, list(
+      list(
+        x = 71.2,
+        xref = "x",
+        y = -0.04,
+        yref = "paper",
+        text = "+",
+        showarrow = FALSE,
+        font = list(size = 14),
+        xanchor = "right",
+        yanchor = "middle"
+      )
+    ))
+  }
+
+  list(
+    name = as.character(year),
+    layout = list(annotations = annotations)
+  )
+})
+
+# Add the frames to the plotly object
+if (!is.null(plot$x$frames)) {
+  # Iterate over each frame and set or clear annotations as needed
+  for (i in seq_along(plot$x$frames)) {
+    frame_name <- plot$x$frames[[i]]$name
+    
+    # Find the corresponding annotations for this frame
+    annotation_frame <- annotations_per_frame[[i]]
+    
+    # Check if the frame names match
+    if (frame_name == annotation_frame$name) {
+      # Replace the annotations for this frame instead of appending
+      plot$x$frames[[i]]$layout$annotations <- annotation_frame$layout$annotations
+    }
+  }
+}
+
+
+# Display the plot
+plot
+```
+## Marriages - females
+
+```{r marriages - females}
+marriages <- read_xlsx("data/Births, Marriages and civil partnerships by single year of age.xlsx",
+                    sheet = "Marriages - Females",
+                    range = "A2:AY78")%>% 
+  pivot_longer(cols = !"AGE",
+               names_to = "Year",
+               values_to = "marriages") %>% 
+  rename("Age" = "AGE") %>% 
+  mutate(Year = as.numeric(Year),
+         Age = case_when(Age > 70 ~ 70,
+                         TRUE ~ Age)) %>% 
+  group_by(Age, Year) %>% 
+  summarise(marriages = sum(marriages, na.rm = TRUE)) %>% 
+  ungroup()
+
+
+for (i in c(1974, 1983, 1993, 2003, 2013)) {
+  
+  marriages_year <- marriages %>% 
+  filter(Year == i) %>% 
+  select(Age, marriages_year = marriages)
+  
+ 
+  
+  marriages <- left_join(marriages,
+                               marriages_year,
+                               by = "Age") %>% 
+    mutate(marriages_year = case_when(Year < i ~ marriages,
+                                      TRUE ~ marriages_year))
+  
+  names(marriages)[names(marriages) == "marriages_year"] <- paste0("marriages_", i)
+  
+  
+}
+
+# Create the base plot
+plot <-  
+  plot_ly(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages_1974,
+    frame = ~Year,
+    type = "scatter",
+    mode = "lines",
+    line = list(color = nisra_blue,
+                width = 2),
+     showlegend = TRUE,
+     name = "Marriages in 1974"
+  ) %>% 
+  add_trace(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages_1983,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = nisra_col3_green),
+    showlegend = TRUE,
+    name = "Marriages in 1983"
+  ) %>% 
+  add_trace(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages_1993,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = nisra_col4_purple),
+    showlegend = TRUE,
+    name = "Marriages in 1993"
+  ) %>%
+  add_trace(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages_2003,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = nisra_col5_lilac),
+    showlegend = TRUE,
+    name = "Marriages in 2003"
+  ) %>%
+   add_trace(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages_2013,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = "#555555"),
+    showlegend = TRUE,
+    name = "Marriages in 2013"
+    ) %>% 
+  add_trace(
+    data = marriages,
+    x = ~Age,
+    y = ~marriages,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = nisra_navy),
+    showlegend = TRUE,
+    name = ~paste("Marriages in", Year)) %>%
+  layout(
+    font = list(family = "Arial", size = 14),
+    yaxis = list(title = "",
+                 tickformat = ",.0f"),
+    xaxis = list(showgrid = FALSE),
+    margin = list(t = 100),
+    legend = list(showlegend = TRUE,
+                  x = 1,
+                  xanchor = "right",
+                  xref = "paper",
+                  y = 0.88,
+                  yanchor = "top"),
+    images = list(
+      list(source = "img/NISRA logo Pens Colour (EPS).png",
+           xref = "paper",
+           yref = "paper",
+           x = 1,
+           y = 1.3,
+           sizex = 0.25,
+           sizey = 0.25,
+           xanchor = "right",
+           yanchor = "top")
+    ),
+    title = list(text = ~paste("Marriages by age of female:", min(Year), "to", max(Year)))
+  ) %>%
+  animation_opts(
+    frame = 500,
+    easing = "sin",
+    redraw = TRUE
+  ) %>%
+  animation_slider(
+    currentvalue = list(
+      font = list(
+        color = "black",    # Set the color for the year text
+        size = 18         # Set the size for the year text
+      )
+    )
+  ) %>%
+  config(displayModeBar = FALSE)
+
+# Create frames with annotations
+annotations_per_frame <- lapply(unique(marriages$Year), function(year) {
+  annotations <- list()
+
+  if (year >= 2019) {
+    annotations <- append(annotations, list(
+      list(
+        x = 0.5,
+        xref = "paper",
+        y = 0.5,
+        yref = "paper",
+        text = "2020: Start of\nCOVID-19 pandemic",
+        showarrow = FALSE,
+        font = list(size = 14),
+        xanchor = "center",
+        yanchor = "middle"
+      )
+    ))
+  }
+  
+  if (year >= min(unique(marriages$Year))) {
+    annotations <- append(annotations, list(
+      list(
+        x = 71.2,
+        xref = "x",
+        y = -0.04,
+        yref = "paper",
+        text = "+",
+        showarrow = FALSE,
+        font = list(size = 14),
+        xanchor = "right",
+        yanchor = "middle"
+      )
+    ))
+  }
+
+  list(
+    name = as.character(year),
+    layout = list(annotations = annotations)
+  )
+})
+
+# Add the frames to the plotly object
+if (!is.null(plot$x$frames)) {
+  # Iterate over each frame and set or clear annotations as needed
+  for (i in seq_along(plot$x$frames)) {
+    frame_name <- plot$x$frames[[i]]$name
+    
+    # Find the corresponding annotations for this frame
+    annotation_frame <- annotations_per_frame[[i]]
+    
+    # Check if the frame names match
+    if (frame_name == annotation_frame$name) {
+      # Replace the annotations for this frame instead of appending
+      plot$x$frames[[i]]$layout$annotations <- annotation_frame$layout$annotations
+    }
+  }
+}
+
+
+# Display the plot
+plot
+```
