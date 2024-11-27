@@ -1,0 +1,449 @@
+---
+title: "Vital Stats Animations"
+format:
+  revealjs:
+    embed-resources: true
+---
+
+```{r setup}
+library(plotly)
+library(dplyr)
+library(readxl)
+library(tidyr)
+library(jsonlite)
+library(rjson)
+
+transform_URL <- function(URL) {
+  
+  URL %>%
+    gsub(" ", "", .) %>%
+    gsub('"', "%22", .) %>%
+    gsub("\\{", "%7B", .) %>%
+    gsub("\\}", "%7D", .) %>%
+    gsub("\\[", "%5B", .) %>%
+    gsub("\\]", "%5D", .) %>%
+    gsub("\\n", "", .) %>%
+    gsub("\\t", "", .)
+  
+}
+
+json_data_from_rpc <- function (query) {
+  jsonlite::fromJSON(
+    txt = transform_URL(paste0(
+      'https://ws-data.nisra.gov.uk/public/api.jsonrpc?data=',
+   query))
+  )$result
+}
+
+nisra_green_decoration <- "#CEDC20"
+nisra_blue <- "#3878c5"
+nisra_navy <- "#00205b"
+nisra_col3_green <- "#68a41e"
+nisra_col4_purple <- "#732777"
+nisra_col5_lilac <- "#ce70d2" 
+```
+
+## Mid Year Estimate by age
+
+```{r mye bar}
+
+mye_json <- json_data_from_rpc('
+  {
+  	"jsonrpc": "2.0",
+  	"method": "PxStat.Data.Cube_API.ReadDataset",
+  	"params": {
+  		"class": "query",
+  		"id": [
+  			"Sex"
+  		],
+  		"dimension": {
+  			"Sex": {
+  				"category": {
+  					"index": [
+  						"All"
+  					]
+  				}
+  			}
+  		},
+  		"extension": {
+  			"pivot": null,
+  			"codes": false,
+  			"language": {
+  				"code": "en"
+  			},
+  			"format": {
+  				"type": "JSON-stat",
+  				"version": "2.0"
+  			},
+  			"matrix": "MYE01T08"
+  		},
+  		"version": "2.0"
+  	}
+  }
+')
+
+num_ages <- length(mye_json$dimension$Age$category$index)
+
+years <- c()
+
+for (i in 1:length(mye_json$dimension$`TLIST(A1)`$category$index)) {
+  years <- c(years, rep(mye_json$dimension$`TLIST(A1)`$category$index[i], num_ages))
+}
+
+mye_data <- data.frame(Year = years,
+                       age = rep_len(mye_json$dimension$Age$category$index, length.out = length(mye_json$value)),
+                       mye = mye_json$value) %>% 
+  mutate(age = case_when(age == "90+" ~ 90,
+                         TRUE ~ as.numeric(age)),
+         age = factor(age, levels = 0:90, labels = c(0:89, "90+")))
+
+# Values for separate trace with year 1 isolated
+
+mye_year_1 <- mye_data %>%
+  filter(Year == min(Year)) %>% 
+  select(age, mye_year_1 = mye)
+
+# Match on to mye data frame so year 1 is displayed for all
+# animation frames
+
+mye_data <- mye_data %>% 
+  left_join(mye_year_1,
+            by = "age")
+
+# Create the base plot
+plot <- plot_ly(mye_data,
+    x = ~age,
+    y = ~mye_year_1,
+    frame = ~Year,
+    type = "bar",
+    marker = list(color = "#8fb7e7"),
+    showlegend = TRUE,
+    name = ~paste("Population MYE in", min(Year))) %>%
+  add_trace(
+    data = mye_data,
+    x = ~age,
+    y = ~mye,
+    type = "bar",
+    frame = ~Year,
+    marker = list(color = "#68a41e80"),
+    showlegend = TRUE,
+    name = ~paste("Population MYE in", Year)
+  ) %>%
+  layout(
+    bargap = 0,
+    barmode = "overlay",
+    font = list(family = "Arial", size = 14),
+    xaxis = list(dtick = "10",
+                 title = "Age"),
+    yaxis = list(title = "",
+                 tickformat = ",.0f"),
+    margin = list(t = 100),
+    legend = list(showlegend = TRUE,
+                  x = 1,
+                  xanchor = "right",
+                  xref = "paper",
+                  y = 1,
+                  yanchor = "top",
+                  yref = "paper"),
+    images = list(
+      list(source = "img/NISRA logo Pens Colour (EPS).png",
+           xref = "paper",
+           yref = "paper",
+           x = 1,
+           y = 1.3,
+           sizex = 0.25,
+           sizey = 0.25,
+           xanchor = "right",
+           yanchor = "top")
+    ),
+    title = list(text = ~paste("Population Mid Year Estimate by age:", min(Year), "to", max(Year)))
+  ) %>%
+  animation_opts(
+    frame = 500,
+    easing = "sin",
+    redraw = TRUE
+  ) %>%
+  animation_slider(
+    currentvalue = list(
+      font = list(
+        color = "black",    
+        size = 18 
+      )
+    )
+  ) %>%
+  config(displayModeBar = FALSE)
+
+# Display the plot
+plot
+
+```
+
+## Employment vs Unemployment
+
+```{r employment line}
+emp_json <- json_data_from_rpc('
+  {
+  	"jsonrpc": "2.0",
+  	"method": "PxStat.Data.Cube_API.ReadDataset",
+  	"params": {
+  		"class": "query",
+  		"id": [
+  			"STATISTIC"
+  		],
+  		"dimension": {
+  			"STATISTIC": {
+  				"category": {
+  					"index": [
+  						"EMPR",
+  						"UNEMPR"
+  					]
+  				}
+  			}
+  		},
+  		"extension": {
+  			"pivot": null,
+  			"codes": false,
+  			"language": {
+  				"code": "en"
+  			},
+  			"format": {
+  				"type": "JSON-stat",
+  				"version": "2.0"
+  			},
+  			"matrix": "LMSAGE"
+  		},
+  		"version": "2.0"
+  	}
+  }
+')
+
+num_stats <- length(emp_json$dimension$STATISTIC$category$index)
+
+num_ages <- length(emp_json$dimension$AGEGRP$category$index)
+
+years <- c()
+
+for (i in 1:length(emp_json$dimension$`TLIST(A1)`$category$index)) {
+  years <- c(years, rep(emp_json$dimension$`TLIST(A1)`$category$index[i], num_ages))
+}
+
+years <- rep(years, num_stats)
+
+stats <- c()
+
+for (i in 1:num_stats) {
+  stats <- c(stats, rep(emp_json$dimension$STATISTIC$category$label[i][[1]], length(emp_json$value) / num_stats))
+}
+
+emp_data <- data.frame(Statistic = stats,
+                       Year = years,
+                       age = rep_len(unlist(emp_json$dimension$AGEGRP$category$label), length.out = length(emp_json$value)),
+                       pct = emp_json$value / 100) %>% 
+  mutate(age = gsub("Age ", "", age))
+
+plot <- plot_ly(emp_data %>% filter(Statistic == "Employment rate"),
+    x = ~age,
+    y = ~pct,
+    frame = ~Year,
+    type = "scatter",
+    mode = "lines",
+    line = list(color = nisra_blue,
+                width = 2),
+    showlegend = TRUE,
+    name = ~paste("Employment rate in", Year)) %>%
+  add_trace(
+    data = emp_data %>% filter(Statistic == "Unemployment rate"),
+    x = ~age,
+    y = ~pct,
+    type = "scatter",
+    mode = "lines",
+    frame = ~Year,
+    line = list(color = nisra_navy),
+    showlegend = TRUE,
+    name = ~paste("Unemployment rate in", Year)
+  ) %>%
+  layout(
+    font = list(family = "Arial", size = 14),
+    yaxis = list(title = "",
+                 tickformat = "0%"),
+    xaxis = list(showgrid = FALSE,
+                 title = "Age Group"),
+    margin = list(t = 100),
+    legend = list(showlegend = TRUE,
+                  x = 1,
+                  xanchor = "right",
+                  xref = "paper",
+                  y = 1,
+                  yanchor = "top"),
+    images = list(
+      list(source = "img/NISRA logo Pens Colour (EPS).png",
+           xref = "paper",
+           yref = "paper",
+           x = 1,
+           y = 1.3,
+           sizex = 0.25,
+           sizey = 0.25,
+           xanchor = "right",
+           yanchor = "top")
+    ),
+    title = list(text = ~paste("Employment and Unemployment rates:", min(Year), "to", max(Year)))
+  ) %>%
+  animation_opts(
+    frame = 500,
+    easing = "sin",
+    redraw = TRUE
+  ) %>%
+  animation_slider(
+    currentvalue = list(
+      font = list(
+        color = "black",    # Set the color for the year text
+        size = 18         # Set the size for the year text
+      )
+    )
+  ) %>%
+  config(displayModeBar = FALSE)
+
+plot
+```
+
+## Cancer patient waiting times
+
+```{r cancer bar}
+
+cancer_json <- json_data_from_rpc('
+{
+	"jsonrpc": "2.0",
+	"method": "PxStat.Data.Cube_API.ReadDataset",
+	"params": {
+		"class": "query",
+		"id": [
+			"STATISTIC",
+			"HSCT"
+		],
+		"dimension": {
+			"STATISTIC": {
+				"category": {
+					"index": [
+						"OVER62DAYS",
+						"WITHIN62DAYS"
+					]
+				}
+			},
+			"HSCT": {
+				"category": {
+					"index": [
+						"BHSCT",
+						"NHSCT",
+						"SEHSCT",
+						"SHSCT",
+						"WHSCT"
+					]
+				}
+			}
+		},
+		"extension": {
+			"pivot": null,
+			"codes": false,
+			"language": {
+				"code": "en"
+			},
+			"format": {
+				"type": "JSON-stat",
+				"version": "2.0"
+			},
+			"matrix": "CWT62HSCT"
+		},
+		"version": "2.0"
+	}
+}
+')
+
+num_stats <- length(cancer_json$dimension$STATISTIC$category$index)
+
+num_trusts <- length(cancer_json$dimension$HSCT$category$index)
+
+dates <- c()
+
+for (i in 1:length(cancer_json$dimension$`TLIST(M1)`$category$index)) {
+  dates <- c(dates, rep(cancer_json$dimension$`TLIST(M1)`$category$index[i], num_ages))
+}
+
+dates <- rep(dates, num_stats)
+
+stats <- c()
+
+for (i in 1:num_stats) {
+  stats <- c(stats, rep(cancer_json$dimension$STATISTIC$category$label[i][[1]], length(cancer_json$value) / num_stats))
+}
+
+cancer_data <- data.frame(Statistic = stats,
+                       date = dates,
+                       Trust = rep_len(unlist(cancer_json$dimension$HSCT$category$label), length.out = length(cancer_json$value)),
+                       patients = cancer_json$value) %>% 
+  mutate(Month = factor(date,
+                        levels = unique(date),
+                        labels = paste(month.abb[as.numeric(substr(unique(date), 6, 7))], substr(unique(date), 1, 4))))
+
+
+plot <- plot_ly(cancer_data %>% filter(Statistic == "Patients seen >62 days"),
+    x = ~Trust,
+    y = ~patients,
+    frame = ~Month,
+    type = "bar",
+    marker = list(color = nisra_blue),
+    showlegend = TRUE,
+    name = ~paste("Patients seen >62 days in", Month)) %>%
+  add_trace(
+    data = cancer_data %>% filter(Statistic == "Patients seen 0-62 days"),
+    x = ~Trust,
+    y = ~patients,
+    type = "bar",
+    frame = ~Month,
+    marker = list(color = nisra_navy),
+    showlegend = TRUE,
+    name = ~paste("Patients seen 0-62 days in", Month)
+  ) %>%
+  layout(
+    font = list(family = "Arial", size = 14),
+    yaxis = list(title = "",
+                 tickformat = ",.0f"),
+    xaxis = list(showgrid = FALSE),
+    margin = list(t = 100),
+    legend = list(showlegend = TRUE,
+                  x = 1,
+                  xanchor = "right",
+                  xref = "paper",
+                  y = 1,
+                  yanchor = "top"),
+    images = list(
+      list(source = "img/NISRA logo Pens Colour (EPS).png",
+           xref = "paper",
+           yref = "paper",
+           x = 1,
+           y = 1.3,
+           sizex = 0.25,
+           sizey = 0.25,
+           xanchor = "right",
+           yanchor = "top")
+    ),
+    title = list(text = ~paste("Cancer waiting times:", head(Month, 1), "to", tail(Month, 1)))
+  ) %>%
+  animation_opts(
+    frame = 500,
+    easing = "sin",
+    redraw = TRUE
+  ) %>%
+  animation_slider(
+    currentvalue = list(
+      font = list(
+        color = "black",    # Set the color for the year text
+        size = 18         # Set the size for the year text
+      )
+    )
+  ) %>%
+  config(displayModeBar = FALSE)
+
+plot
+
+
+```
