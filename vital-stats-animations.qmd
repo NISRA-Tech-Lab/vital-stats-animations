@@ -6,17 +6,7 @@ format:
 ---
 
 ```{r setup}
-library(plotly)
-library(dplyr)
-library(readxl)
-library(tidyr)
-
-nisra_green_decoration <- "#CEDC20"
-nisra_blue <- "#3878c5"
-nisra_navy <- "#00205b"
-nisra_col3_green <- "#68a41e"
-nisra_col4_purple <- "#732777"
-nisra_col5_lilac <- "#ce70d2" 
+source("config.R")
 ```
 
 ## Number of deaths by age

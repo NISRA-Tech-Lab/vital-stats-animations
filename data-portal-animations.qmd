@@ -6,41 +6,7 @@ format:
 ---
 
 ```{r setup}
-library(plotly)
-library(dplyr)
-library(readxl)
-library(tidyr)
-library(jsonlite)
-library(rjson)
-
-transform_URL <- function(URL) {
-  
-  URL %>%
-    gsub(" ", "", .) %>%
-    gsub('"', "%22", .) %>%
-    gsub("\\{", "%7B", .) %>%
-    gsub("\\}", "%7D", .) %>%
-    gsub("\\[", "%5B", .) %>%
-    gsub("\\]", "%5D", .) %>%
-    gsub("\\n", "", .) %>%
-    gsub("\\t", "", .)
-  
-}
-
-json_data_from_rpc <- function (query) {
-  jsonlite::fromJSON(
-    txt = transform_URL(paste0(
-      'https://ws-data.nisra.gov.uk/public/api.jsonrpc?data=',
-   query))
-  )$result
-}
-
-nisra_green_decoration <- "#CEDC20"
-nisra_blue <- "#3878c5"
-nisra_navy <- "#00205b"
-nisra_col3_green <- "#68a41e"
-nisra_col4_purple <- "#732777"
-nisra_col5_lilac <- "#ce70d2" 
+source("config.R")
 ```
 
 ## Mid Year Estimate by age
