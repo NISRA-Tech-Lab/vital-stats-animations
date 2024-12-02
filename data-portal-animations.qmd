@@ -1,5 +1,5 @@
 ---
-title: "Vital Stats Animations"
+title: "Data Portal Animations"
 format:
   revealjs:
     embed-resources: true
@@ -144,7 +144,7 @@ plot
 
 ```
 
-## Employment vs Unemployment
+## Employment
 
 ```{r employment line}
 emp_json <- json_data_from_rpc('
@@ -160,8 +160,7 @@ emp_json <- json_data_from_rpc('
   			"STATISTIC": {
   				"category": {
   					"index": [
-  						"EMPR",
-  						"UNEMPR"
+  						"EMPR"
   					]
   				}
   			}
@@ -207,26 +206,31 @@ emp_data <- data.frame(Statistic = stats,
                        pct = emp_json$value / 100) %>% 
   mutate(age = gsub("Age ", "", age))
 
-plot <- plot_ly(emp_data %>% filter(Statistic == "Employment rate"),
+emp_year_1 <- emp_data %>%
+  filter(Year == min(Year)) %>% 
+  select(age, pct_year_1 = pct)
+
+emp_data <- emp_data %>% 
+  left_join(emp_year_1,
+            by = "age")
+
+plot <- plot_ly(emp_data,
     x = ~age,
-    y = ~pct,
+    y = ~pct_year_1,
     frame = ~Year,
-    type = "scatter",
-    mode = "lines",
-    line = list(color = nisra_blue,
-                width = 2),
+    type = "bar",
+    bar = list(color = nisra_blue),
     showlegend = TRUE,
-    name = ~paste("Employment rate in", Year)) %>%
+    name = ~paste("Employment rate in", min(Year))) %>%
   add_trace(
-    data = emp_data %>% filter(Statistic == "Unemployment rate"),
+    data = emp_data,
     x = ~age,
     y = ~pct,
-    type = "scatter",
-    mode = "lines",
+    type = "bar",
     frame = ~Year,
-    line = list(color = nisra_navy),
+    marker = list(color = nisra_navy),
     showlegend = TRUE,
-    name = ~paste("Unemployment rate in", Year)
+    name = ~paste("Employment rate in", Year)
   ) %>%
   layout(
     font = list(family = "Arial", size = 14),
@@ -252,7 +256,7 @@ plot <- plot_ly(emp_data %>% filter(Statistic == "Employment rate"),
            xanchor = "right",
            yanchor = "top")
     ),
-    title = list(text = ~paste("Employment and Unemployment rates:", min(Year), "to", max(Year)))
+    title = list(text = ~paste("Employment rate:", min(Year), "to", max(Year)))
   ) %>%
   animation_opts(
     frame = 500,
@@ -298,11 +302,7 @@ cancer_json <- json_data_from_rpc('
 			"HSCT": {
 				"category": {
 					"index": [
-						"BHSCT",
-						"NHSCT",
-						"SEHSCT",
-						"SHSCT",
-						"WHSCT"
+						"N92000002"
 					]
 				}
 			}
@@ -331,7 +331,7 @@ num_trusts <- length(cancer_json$dimension$HSCT$category$index)
 dates <- c()
 
 for (i in 1:length(cancer_json$dimension$`TLIST(M1)`$category$index)) {
-  dates <- c(dates, rep(cancer_json$dimension$`TLIST(M1)`$category$index[i], num_ages))
+  dates <- c(dates, rep(cancer_json$dimension$`TLIST(M1)`$category$index[i], num_trusts))
 }
 
 dates <- rep(dates, num_stats)
@@ -348,36 +348,46 @@ cancer_data <- data.frame(Statistic = stats,
                        patients = cancer_json$value) %>% 
   mutate(Month = factor(date,
                         levels = unique(date),
-                        labels = paste(month.abb[as.numeric(substr(unique(date), 6, 7))], substr(unique(date), 1, 4))))
+                        labels = paste(month.abb[as.numeric(substr(unique(date), 6, 7))], substr(unique(date), 1, 4))),
+         Statistic = factor(Statistic, levels = c("Patients seen 0-62 days", "Patients seen >62 days")))
+
+cancer_month_1 <- cancer_data %>% 
+  filter(Month == levels(Month)[1]) %>% 
+  select(Statistic, patients_month_1 = patients)
+
+cancer_data <- cancer_data %>% 
+  left_join(cancer_month_1,
+            by = "Statistic")
 
 
-plot <- plot_ly(cancer_data %>% filter(Statistic == "Patients seen >62 days"),
-    x = ~Trust,
-    y = ~patients,
-    frame = ~Month,
-    type = "bar",
+plot <- plot_ly(cancer_data,
+    x = ~Statistic,
+    y = ~patients_month_1,
     marker = list(color = nisra_blue),
-    showlegend = TRUE,
-    name = ~paste("Patients seen >62 days in", Month)) %>%
-  add_trace(
-    data = cancer_data %>% filter(Statistic == "Patients seen 0-62 days"),
-    x = ~Trust,
-    y = ~patients,
-    type = "bar",
     frame = ~Month,
-    marker = list(color = nisra_navy),
+    type = "bar",
     showlegend = TRUE,
-    name = ~paste("Patients seen 0-62 days in", Month)
+    name = ~paste0("Number of patients in ", head(Month, 1))
   ) %>%
+  add_trace(cancer_data,
+    x = ~Statistic,
+    y = ~patients,
+    marker = list(color = nisra_navy),
+    frame = ~Month,
+    type = "bar",
+    showlegend = TRUE,
+    name = ~paste0("Number of patients in ", Month)
+  ) %>% 
   layout(
     font = list(family = "Arial", size = 14),
     yaxis = list(title = "",
                  tickformat = ",.0f"),
-    xaxis = list(showgrid = FALSE),
+    xaxis = list(showgrid = FALSE,
+                 title = ""),
     margin = list(t = 100),
     legend = list(showlegend = TRUE,
-                  x = 1,
-                  xanchor = "right",
+                  x = 0.5,
+                  xanchor = "center",
                   xref = "paper",
                   y = 1,
                   yanchor = "top"),
@@ -395,7 +405,7 @@ plot <- plot_ly(cancer_data %>% filter(Statistic == "Patients seen >62 days"),
     title = list(text = ~paste("Cancer waiting times:", head(Month, 1), "to", tail(Month, 1)))
   ) %>%
   animation_opts(
-    frame = 500,
+    frame = 250,
     easing = "sin",
     redraw = TRUE
   ) %>%
